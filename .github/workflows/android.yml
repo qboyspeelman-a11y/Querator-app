@@ -24,6 +24,11 @@ jobs:
           npm install
           npm run build
 
+      - name: Clean & Generate Fresh Android Project
+        run: |
+          rm -rf android
+          npx --yes @capacitor/cli add android
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
