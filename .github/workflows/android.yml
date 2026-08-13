@@ -24,6 +24,10 @@ jobs:
           npm install
           npm run build
 
+      - name: Sync Capacitor Android
+        run: |
+          npx cap sync android
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
@@ -33,10 +37,6 @@ jobs:
 
       - name: Grant Execute Permission for Gradlew
         run: chmod +x android/gradlew
-
-      - name: Sync Capacitor Android
-        run: |
-          npx cap sync android
 
       - name: Build Debug APK
         working-directory: ./android
