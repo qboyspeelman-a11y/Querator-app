@@ -11,6 +11,7 @@ function MainApp() {
   const [session, setSession] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [needsProfileSetup, setNeedsProfileSetup] = useState(false);
   
   const navigate = useNavigate();
   const location = useLocation();
@@ -78,6 +79,7 @@ function MainApp() {
         await fetchUserProfile(session.user.id, session.user.email || '');
       } else {
         setUserProfile(null);
+        setNeedsProfileSetup(false);
         setLoading(false);
       }
     });
@@ -88,7 +90,7 @@ function MainApp() {
     };
   }, []);
 
-  // Fetch or auto-create profile if missing
+  // Fetch or flag new profile setup instead of forcing auto-unapproved status loop
   async function fetchUserProfile(userId: string, userEmail: string) {
     setLoading(true);
     let { data, error } = await supabase
@@ -98,24 +100,12 @@ function MainApp() {
       .single();
 
     if (error || !data) {
-      const defaultPayload = {
-        id: userId,
-        email: userEmail,
-        full_name: userEmail?.split('@')[0] || 'User',
-        role: 'student',
-        is_approved: false
-      };
-
-      const { data: createdData } = await supabase
-        .from('profiles')
-        .upsert(defaultPayload)
-        .select()
-        .single();
-
-      data = createdData;
+      setNeedsProfileSetup(true);
+      setUserProfile(null);
+    } else {
+      setNeedsProfileSetup(false);
+      setUserProfile(data);
     }
-
-    setUserProfile(data || null);
     setLoading(false);
   }
 
@@ -225,6 +215,7 @@ function MainApp() {
               await supabase.auth.signOut();
               setSession(null);
               setUserProfile(null);
+              setNeedsProfileSetup(false);
               navigate('/');
             }}
             className="text-xs font-semibold bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-xl transition duration-200 shadow-2xs active:scale-95"
@@ -454,6 +445,181 @@ function MainApp() {
                   </div>
                 </div>
               </div>
+            ) : needsProfileSetup ? (
+              <div className="flex flex-col items-center justify-center pt-8 px-4 pb-16 animate-fadeIn">
+                <div className="bg-white/90 backdrop-blur-xl p-8 rounded-3xl shadow-2xl border border-white max-w-md w-full text-center">
+                  <h1 className="text-2xl font-black text-gray-900 mb-1">Complete Your Profile</h1>
+                  <p className="text-gray-400 text-xs mb-6">Select your role and enter your details to finish setting up your account.</p>
+                  
+                  <form onSubmit={async (e) => {
+                    e.preventDefault();
+                    const profilePayload = {
+                      id: session.user.id,
+                      email: session.user.email,
+                      full_name: fullName || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'User',
+                      role: selectedRole,
+                      is_approved: false,
+                      phone: selectedRole === 'caretaker' ? phone : studentPhone,
+                      property_complex: selectedRole === 'caretaker' ? propertyComplex : '',
+                      unit_count: selectedRole === 'caretaker' ? unitCount : '',
+                      room_number: selectedRole === 'student' ? roomNumber : '',
+                      assigned_complex: selectedRole === 'student' ? assignedComplex : '',
+                      institution: selectedRole === 'caretaker' ? caretakerInstitution : studentInstitution
+                    };
+
+                    const { error } = await supabase.from('profiles').upsert(profilePayload);
+                    if (error) {
+                      alert(`Error saving profile: ${error.message}`);
+                    } else {
+                      setNeedsProfileSetup(false);
+                      fetchUserProfile(session.user.id, session.user.email);
+                    }
+                  }} className="space-y-3 text-left">
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-wider mb-1">Full Name</label>
+                      <input
+                        type="text"
+                        required
+                        value={fullName}
+                        onChange={(e) => setFullName(e.target.value)}
+                        className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                        placeholder="John Doe"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-wider mb-1">Select Your Role</label>
+                      <select
+                        value={selectedRole}
+                        onChange={(e) => {
+                          const newRole = e.target.value as any;
+                          setSelectedRole(newRole);
+                          if (newRole === 'student') fetchApprovedHouses();
+                        }}
+                        className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                      >
+                        <option value="student">Student Commuter</option>
+                        <option value="driver">Shuttle Driver</option>
+                        <option value="caretaker">Housing Caretaker</option>
+                      </select>
+                    </div>
+
+                    {selectedRole === 'caretaker' && (
+                      <div className="bg-gray-50/80 p-4 rounded-2xl border border-gray-100 space-y-3">
+                        <p className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">Caretaker Details</p>
+                        <div>
+                          <label className="block text-[10px] font-semibold text-gray-500 mb-1">Phone Number</label>
+                          <input
+                            type="tel"
+                            required
+                            value={phone}
+                            onChange={(e) => setPhone(e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white"
+                            placeholder="062 448 7650"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-semibold text-gray-500 mb-1">Housing Complex Name</label>
+                          <input
+                            type="text"
+                            required
+                            value={propertyComplex}
+                            onChange={(e) => setPropertyComplex(e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white"
+                            placeholder="e.g. Campus View Residences"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-semibold text-gray-500 mb-1">Units Managed</label>
+                          <input
+                            type="number"
+                            required
+                            value={unitCount}
+                            onChange={(e) => setUnitCount(e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white"
+                            placeholder="e.g. 24"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-semibold text-gray-500 mb-1">Student Institution Category</label>
+                          <select
+                            value={caretakerInstitution}
+                            onChange={(e) => setCaretakerInstitution(e.target.value as any)}
+                            className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white"
+                          >
+                            <option value="vut">VUT Students Only</option>
+                            <option value="nwu">NWU Students Only</option>
+                            <option value="mix">Mix of Both (VUT & NWU)</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
+
+                    {selectedRole === 'student' && (
+                      <div className="bg-blue-50/40 p-4 rounded-2xl border border-blue-100/60 space-y-3">
+                        <p className="text-[11px] font-bold text-blue-800 uppercase tracking-wider">Student Boarding Details</p>
+                        <div>
+                          <label className="block text-[10px] font-semibold text-gray-600 mb-1">Contact Phone Number</label>
+                          <input
+                            type="tel"
+                            required
+                            value={studentPhone}
+                            onChange={(e) => setStudentPhone(e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white"
+                            placeholder="062 448 7650"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-semibold text-gray-600 mb-1">Target Institution</label>
+                          <select
+                            value={studentInstitution}
+                            onChange={(e) => setStudentInstitution(e.target.value as any)}
+                            className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white"
+                          >
+                            <option value="vut">Vaal University of Technology (VUT)</option>
+                            <option value="nwu">North-West University (NWU)</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-semibold text-gray-600 mb-1">Assigned Approved Housing Complex</label>
+                          <select
+                            required
+                            value={assignedComplex}
+                            onChange={(e) => setAssignedComplex(e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white"
+                          >
+                            <option value="">-- Select Approved Residence --</option>
+                            {approvedHouses.length > 0 ? (
+                              approvedHouses.map((house, idx) => (
+                                <option key={idx} value={house}>{house}</option>
+                              ))
+                            ) : (
+                              <option value="" disabled>No approved houses available yet</option>
+                            )}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-semibold text-gray-600 mb-1">Room Number / Unit</label>
+                          <input
+                            type="text"
+                            required
+                            value={roomNumber}
+                            onChange={(e) => setRoomNumber(e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white"
+                            placeholder="e.g. Room 104B"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <button
+                      type="submit"
+                      className="w-full bg-blue-600 text-white py-3 rounded-2xl font-semibold text-sm shadow-lg hover:bg-blue-700 transition mt-4"
+                    >
+                      Save Profile & Continue
+                    </button>
+                  </form>
+                </div>
+              </div>
             ) : !isEmailVerified ? (
               <div className="min-h-[75vh] flex items-center justify-center px-4 animate-fadeIn">
                 <div className="bg-white p-8 rounded-3xl shadow-xl border border-gray-100 max-w-md w-full text-center relative overflow-hidden">
@@ -467,6 +633,7 @@ function MainApp() {
                       await supabase.auth.signOut();
                       setSession(null);
                       setUserProfile(null);
+                      setNeedsProfileSetup(false);
                     }}
                     className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-xl text-xs font-semibold transition"
                   >
