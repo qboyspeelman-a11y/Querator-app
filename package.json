@@ -8,9 +8,9 @@
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview"
-    },
-"dependencies": {
-    "@capacitor/android": "^6.0.0",
+  },
+  "dependencies": {
+    "@capacitor/app": "^7.0.0",
     "@capacitor/core": "^7.0.0",
     "@supabase/supabase-js": "^2.39.0",
     "react": "^18.2.0",
@@ -18,11 +18,13 @@
     "react-router-dom": "^6.22.0"
   },
   "devDependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/cli": "^7.0.0",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.0.5",
-    "oxlint": "^1.76.0",
+    "oxlint": "^1.7.6",
     "typescript": "~6.0.2",
     "vite": "^8.2.0"
   }
