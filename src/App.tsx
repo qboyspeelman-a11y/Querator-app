@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { App as CapacitorApp } from '@capacitor/app';
 import { supabase } from './supabaseClient';
 import { AdminDashboard } from './AdminDashboard';
 import { CaretakerDashboard } from './CaretakerDashboard';
@@ -54,9 +55,25 @@ function MainApp() {
     fetchApprovedHouses();
   }, []);
 
-  // Strict session and profile synchronization
+  // Strict session, deep-linking, and profile synchronization
   useEffect(() => {
     let isMounted = true;
+
+    // Capacitor Native App Deep Link Listener for Mobile OAuth Handling
+    CapacitorApp.addListener('appUrlOpen', async ({ url }) => {
+      if (url.includes('access_token') || url.includes('refresh_token')) {
+        const regex = /#(.*)/;
+        const match = url.match(regex);
+        if (match) {
+          const params = new URLSearchParams(match[1]);
+          const access_token = params.get('access_token');
+          const refresh_token = params.get('refresh_token');
+          if (access_token && refresh_token) {
+            await supabase.auth.setSession({ access_token, refresh_token });
+          }
+        }
+      }
+    });
 
     async function getInitialSession() {
       const { data: { session } } = await supabase.auth.getSession();
@@ -170,7 +187,9 @@ function MainApp() {
   const handleGoogleSignIn = async () => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: window.location.origin },
+      options: { 
+        redirectTo: window.location.origin,
+      },
     });
     if (error) alert(`Google sign-in error: ${error.message}`);
   };
