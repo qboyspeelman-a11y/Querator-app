@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
-import { App as CapacitorApp } from '@capacitor/app';
 import { supabase } from './supabaseClient';
 import { AdminDashboard } from './AdminDashboard';
 import { CaretakerDashboard } from './CaretakerDashboard';
 import { DriverDashboard } from './DriverDashboard';
 import { StudentDashboard } from './StudentDashboard';
 import { AdminGate } from './AdminGate';
+import { App as CapacitorApp } from '@capacitor/app';
 
 function MainApp() {
   const [session, setSession] = useState<any>(null);
@@ -39,13 +39,11 @@ function MainApp() {
 
   // Input Validation Handlers
   const handleFullNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Restrict numbers on full name / username row (only letters and spaces allowed)
     const val = e.target.value.replace(/[0-9]/g, '');
     setFullName(val);
   };
 
   const handlePhoneInput = (value: string, setter: (val: string) => void) => {
-    // Restrict letters and limit strictly up to 10 numbers
     const digitsOnly = value.replace(/\D/g, '').slice(0, 10);
     setter(digitsOnly);
   };
@@ -68,25 +66,39 @@ function MainApp() {
     fetchApprovedHouses();
   }, []);
 
-  // Strict session, deep-linking, and profile synchronization
+  // Listen for Mobile Deep Links (Capacitor App URL Open Event)
   useEffect(() => {
-    let isMounted = true;
+    let deepLinkSub: any;
 
-    // Capacitor Native App Deep Link Listener for Mobile OAuth Handling
-    CapacitorApp.addListener('appUrlOpen', async ({ url }) => {
-      if (url.includes('access_token') || url.includes('refresh_token')) {
-        const regex = /#(.*)/;
-        const match = url.match(regex);
-        if (match) {
-          const params = new URLSearchParams(match[1]);
-          const access_token = params.get('access_token');
-          const refresh_token = params.get('refresh_token');
-          if (access_token && refresh_token) {
-            await supabase.auth.setSession({ access_token, refresh_token });
+    async function setupDeepLinkListener() {
+      deepLinkSub = await CapacitorApp.addListener('appUrlOpen', async ({ url }) => {
+        if (url.includes('querator://login-callback')) {
+          const regex = /#(.*)/;
+          const match = url.match(regex);
+          if (match) {
+            const params = new URLSearchParams(match[1]);
+            const access_token = params.get('access_token');
+            const refresh_token = params.get('refresh_token');
+            if (access_token && refresh_token) {
+              await supabase.auth.setSession({ access_token, refresh_token });
+            }
           }
         }
+      });
+    }
+
+    setupDeepLinkListener();
+
+    return () => {
+      if (deepLinkSub) {
+        deepLinkSub.remove();
       }
-    });
+    };
+  }, []);
+
+  // Strict session and profile synchronization
+  useEffect(() => {
+    let isMounted = true;
 
     async function getInitialSession() {
       const { data: { session } } = await supabase.auth.getSession();
@@ -143,7 +155,7 @@ function MainApp() {
     e.preventDefault();
     if (authMode === 'forgot') {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: window.location.origin,
+        redirectTo: 'querator://login-callback',
       });
       if (error) {
         alert(`Error: ${error.message}`);
