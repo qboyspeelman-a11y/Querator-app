@@ -18,7 +18,7 @@ function MainApp() {
   const location = useLocation();
 
   // Auth Form State
-  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
+  const [authMode, setAuthMode] = useState<'signin' | 'signup' | 'forgot'>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -36,6 +36,19 @@ function MainApp() {
   const [assignedComplex, setAssignedComplex] = useState('');
   const [studentInstitution, setStudentInstitution] = useState<'nwu' | 'vut'>('vut');
   const [approvedHouses, setApprovedHouses] = useState<string[]>([]);
+
+  // Input Validation Handlers
+  const handleFullNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Restrict numbers on full name / username row (only letters and spaces allowed)
+    const val = e.target.value.replace(/[0-9]/g, '');
+    setFullName(val);
+  };
+
+  const handlePhoneInput = (value: string, setter: (val: string) => void) => {
+    // Restrict letters and limit strictly up to 10 numbers
+    const digitsOnly = value.replace(/\D/g, '').slice(0, 10);
+    setter(digitsOnly);
+  };
 
   // Fetch approved housing complexes for student dropdown
   const fetchApprovedHouses = async () => {
@@ -107,7 +120,6 @@ function MainApp() {
     };
   }, []);
 
-  // Fetch or flag new profile setup instead of forcing auto-unapproved status loop
   async function fetchUserProfile(userId: string, userEmail: string) {
     setLoading(true);
     let { data, error } = await supabase
@@ -129,7 +141,29 @@ function MainApp() {
   // Handle Email Sign-in & Sign-up with Verification trigger
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (authMode === 'forgot') {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin,
+      });
+      if (error) {
+        alert(`Error: ${error.message}`);
+      } else {
+        alert('Password recovery link sent! Please check your email inbox.');
+        setAuthMode('signin');
+      }
+      return;
+    }
+
     if (authMode === 'signup') {
+      if (selectedRole === 'caretaker' && phone.length !== 10) {
+        alert('Phone number must be exactly 10 digits.');
+        return;
+      }
+      if (selectedRole === 'student' && studentPhone.length !== 10) {
+        alert('Phone number must be exactly 10 digits.');
+        return;
+      }
+
       const metadata: any = {
         full_name: fullName,
         role: selectedRole,
@@ -207,8 +241,6 @@ function MainApp() {
 
   const activeRole = userProfile?.role?.trim().toLowerCase();
   const isApproved = userProfile?.is_approved;
-  
-  // Check if email is verified via Supabase session user metadata
   const isEmailVerified = session?.user?.email_confirmed_at || session?.user?.identities?.[0]?.provider !== 'email';
 
   return (
@@ -259,42 +291,50 @@ function MainApp() {
                       <path d="M6 12v5c3 3 9 3 12 0v-5" />
                     </svg>
                   </div>
-                  <h1 className="text-3xl font-black text-white tracking-tight mb-1">Log in or sign up</h1>
-                  <p className="text-gray-400 text-xs mb-6">Access your Querator Shuttle account.</p>
+                  <h1 className="text-3xl font-black text-white tracking-tight mb-1">
+                    {authMode === 'forgot' ? 'Reset Password' : authMode === 'signup' ? 'Create Account' : 'Log in or sign up'}
+                  </h1>
+                  <p className="text-gray-400 text-xs mb-6">
+                    {authMode === 'forgot' ? 'Enter your email to receive a recovery link.' : 'Access your Querator Shuttle account.'}
+                  </p>
                   
-                  {/* Google OAuth Button with Neon Gradient Border */}
-                  <div className="p-[1px] bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500 rounded-2xl mb-4 shadow-lg shadow-purple-950/30">
-                    <button
-                      onClick={handleGoogleSignIn}
-                      className="w-full flex items-center justify-center space-x-2 bg-[#121316] text-gray-200 py-3 rounded-2xl font-semibold text-sm hover:bg-[#181a1f] active:scale-[0.99] transition"
-                    >
-                      <svg className="w-5 h-5" viewBox="0 0 24 24">
-                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
-                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
-                      </svg>
-                      <span>Continue with Google</span>
-                    </button>
-                  </div>
+                  {authMode !== 'forgot' && (
+                    <>
+                      {/* Google OAuth Button with Neon Gradient Border */}
+                      <div className="p-[1px] bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500 rounded-2xl mb-4 shadow-lg shadow-purple-950/30">
+                        <button
+                          onClick={handleGoogleSignIn}
+                          className="w-full flex items-center justify-center space-x-2 bg-[#121316] text-gray-200 py-3 rounded-2xl font-semibold text-sm hover:bg-[#181a1f] active:scale-[0.99] transition"
+                        >
+                          <svg className="w-5 h-5" viewBox="0 0 24 24">
+                            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                          </svg>
+                          <span>Continue with Google</span>
+                        </button>
+                      </div>
 
-                  <div className="relative flex py-2 items-center">
-                    <div className="flex-grow border-t border-gray-800"></div>
-                    <span className="flex-shrink mx-4 text-gray-500 text-[10px] tracking-widest font-bold uppercase">OR EMAIL</span>
-                    <div className="flex-grow border-t border-gray-800"></div>
-                  </div>
+                      <div className="relative flex py-2 items-center">
+                        <div className="flex-grow border-t border-gray-800"></div>
+                        <span className="flex-shrink mx-4 text-gray-500 text-[10px] tracking-widest font-bold uppercase">OR EMAIL</span>
+                        <div className="flex-grow border-t border-gray-800"></div>
+                      </div>
+                    </>
+                  )}
 
                   {/* Email / Password Form */}
                   <form onSubmit={handleEmailAuth} className="space-y-3 mt-4 text-left">
                     {authMode === 'signup' && (
                       <div className="space-y-3 animate-fadeIn">
                         <div>
-                          <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1">Full Name</label>
+                          <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1">Full Name (Letters Only)</label>
                           <input
                             type="text"
                             required
                             value={fullName}
-                            onChange={(e) => setFullName(e.target.value)}
+                            onChange={handleFullNameChange}
                             className="w-full px-4 py-2.5 bg-[#121316] border border-gray-800 rounded-xl text-sm text-white focus:outline-none focus:border-purple-500 transition"
                             placeholder="John Doe"
                           />
@@ -320,14 +360,15 @@ function MainApp() {
                           <div className="bg-[#121316] p-4 rounded-2xl border border-gray-800 space-y-3 animate-fadeIn">
                             <p className="text-[11px] font-bold text-purple-400 uppercase tracking-wider">Caretaker Details</p>
                             <div>
-                              <label className="block text-[10px] font-semibold text-gray-400 mb-1">Phone Number</label>
+                              <label className="block text-[10px] font-semibold text-gray-400 mb-1">Phone Number (Exactly 10 Digits)</label>
                               <input
                                 type="tel"
                                 required
                                 value={phone}
-                                onChange={(e) => setPhone(e.target.value)}
+                                onChange={(e) => handlePhoneInput(e.target.value, setPhone)}
+                                maxLength={10}
                                 className="w-full px-3 py-2 bg-black border border-gray-800 rounded-xl text-xs text-white focus:outline-none focus:border-purple-500"
-                                placeholder="062 448 7650"
+                                placeholder="0624487650"
                               />
                             </div>
                             <div>
@@ -371,14 +412,15 @@ function MainApp() {
                           <div className="bg-[#121316] p-4 rounded-2xl border border-gray-800 space-y-3 animate-fadeIn">
                             <p className="text-[11px] font-bold text-cyan-400 uppercase tracking-wider">Student Boarding Details</p>
                             <div>
-                              <label className="block text-[10px] font-semibold text-gray-400 mb-1">Contact Phone Number</label>
+                              <label className="block text-[10px] font-semibold text-gray-400 mb-1">Contact Phone Number (Exactly 10 Digits)</label>
                               <input
                                 type="tel"
                                 required
                                 value={studentPhone}
-                                onChange={(e) => setStudentPhone(e.target.value)}
+                                onChange={(e) => handlePhoneInput(e.target.value, setStudentPhone)}
+                                maxLength={10}
                                 className="w-full px-3 py-2 bg-black border border-gray-800 rounded-xl text-xs text-white focus:outline-none focus:border-cyan-500"
-                                placeholder="062 448 7650"
+                                placeholder="0624487650"
                               />
                             </div>
                             <div>
@@ -441,37 +483,60 @@ function MainApp() {
                       </div>
                     </div>
 
-                    {/* Password Input with Neon Glow Wrap */}
-                    <div>
-                      <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1">Password</label>
-                      <div className="p-[1px] bg-gradient-to-r from-cyan-500/50 via-purple-500/50 to-pink-500/50 rounded-xl">
-                        <input
-                          type="password"
-                          required
-                          value={password}
-                          onChange={(e) => setPassword(e.target.value)}
-                          className="w-full px-4 py-2.5 bg-[#121316] rounded-xl text-sm text-white focus:outline-none transition"
-                          placeholder="••••••••"
-                        />
+                    {/* Password Input (Hidden if in Forgot Mode) */}
+                    {authMode !== 'forgot' && (
+                      <div>
+                        <div className="flex justify-between items-center mb-1">
+                          <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider">Password</label>
+                          {authMode === 'signin' && (
+                            <button
+                              type="button"
+                              onClick={() => setAuthMode('forgot')}
+                              className="text-[11px] font-semibold text-purple-400 hover:text-purple-300 transition"
+                            >
+                              Forgot Password?
+                            </button>
+                          )}
+                        </div>
+                        <div className="p-[1px] bg-gradient-to-r from-cyan-500/50 via-purple-500/50 to-pink-500/50 rounded-xl">
+                          <input
+                            type="password"
+                            required
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            className="w-full px-4 py-2.5 bg-[#121316] rounded-xl text-sm text-white focus:outline-none transition"
+                            placeholder="••••••••"
+                          />
+                        </div>
                       </div>
-                    </div>
+                    )}
 
                     <button
                       type="submit"
                       className="w-full bg-gradient-to-r from-cyan-500 via-purple-600 to-pink-600 text-white py-3 rounded-2xl font-semibold text-sm shadow-lg shadow-purple-950/50 hover:opacity-95 active:scale-[0.99] transition duration-200 mt-3"
                     >
-                      {authMode === 'signin' ? 'Sign In' : 'Register & Verify Email'}
+                      {authMode === 'forgot' ? 'Send Reset Link' : authMode === 'signin' ? 'Sign In' : 'Register & Verify Email'}
                     </button>
                   </form>
 
-                  <div className="flex justify-center items-center mt-5 text-xs">
-                    <button
-                      type="button"
-                      onClick={() => setAuthMode(authMode === 'signin' ? 'signup' : 'signin')}
-                      className="text-gray-400 hover:text-cyan-400 font-semibold transition"
-                    >
-                      {authMode === 'signin' ? 'Need an account? Register with a Role' : 'Already have an account? Sign In'}
-                    </button>
+                  <div className="flex justify-center items-center mt-5 text-xs space-x-4">
+                    {authMode === 'forgot' ? (
+                      <button
+                        type="button"
+                        onClick={() => setAuthMode('signin')}
+                        className="text-gray-400 hover:text-cyan-400 font-semibold transition"
+                      >
+                        Back to Sign In
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setAuthMode(authMode === 'signin' ? 'signup' : 'signin')}
+                        className="text-gray-400 hover:text-cyan-400 font-semibold transition"
+                      >
+                        {authMode === 'signin' ? 'Need an account? Register with a Role' : 'Already have an account? Sign In'}
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -483,6 +548,15 @@ function MainApp() {
                   
                   <form onSubmit={async (e) => {
                     e.preventDefault();
+                    if (selectedRole === 'caretaker' && phone.length !== 10) {
+                      alert('Phone number must be exactly 10 digits.');
+                      return;
+                    }
+                    if (selectedRole === 'student' && studentPhone.length !== 10) {
+                      alert('Phone number must be exactly 10 digits.');
+                      return;
+                    }
+
                     const profilePayload = {
                       id: session.user.id,
                       email: session.user.email,
@@ -506,12 +580,12 @@ function MainApp() {
                     }
                   }} className="space-y-3 text-left">
                     <div>
-                      <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1">Full Name</label>
+                      <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1">Full Name (Letters Only)</label>
                       <input
                         type="text"
                         required
                         value={fullName}
-                        onChange={(e) => setFullName(e.target.value)}
+                        onChange={handleFullNameChange}
                         className="w-full px-4 py-2.5 bg-[#121316] border border-gray-800 rounded-xl text-sm text-white focus:outline-none focus:border-purple-500"
                         placeholder="John Doe"
                       />
@@ -537,14 +611,15 @@ function MainApp() {
                       <div className="bg-[#121316] p-4 rounded-2xl border border-gray-800 space-y-3">
                         <p className="text-[11px] font-bold text-purple-400 uppercase tracking-wider">Caretaker Details</p>
                         <div>
-                          <label className="block text-[10px] font-semibold text-gray-400 mb-1">Phone Number</label>
+                          <label className="block text-[10px] font-semibold text-gray-400 mb-1">Phone Number (10 Digits)</label>
                           <input
                             type="tel"
                             required
                             value={phone}
-                            onChange={(e) => setPhone(e.target.value)}
+                            onChange={(e) => handlePhoneInput(e.target.value, setPhone)}
+                            maxLength={10}
                             className="w-full px-3 py-2 bg-black border border-gray-800 rounded-xl text-xs text-white"
-                            placeholder="062 448 7650"
+                            placeholder="0624487650"
                           />
                         </div>
                         <div>
@@ -588,14 +663,15 @@ function MainApp() {
                       <div className="bg-[#121316] p-4 rounded-2xl border border-gray-800 space-y-3">
                         <p className="text-[11px] font-bold text-cyan-400 uppercase tracking-wider">Student Boarding Details</p>
                         <div>
-                          <label className="block text-[10px] font-semibold text-gray-400 mb-1">Contact Phone Number</label>
+                          <label className="block text-[10px] font-semibold text-gray-400 mb-1">Contact Phone Number (10 Digits)</label>
                           <input
                             type="tel"
                             required
                             value={studentPhone}
-                            onChange={(e) => setStudentPhone(e.target.value)}
+                            onChange={(e) => handlePhoneInput(e.target.value, setStudentPhone)}
+                            maxLength={10}
                             className="w-full px-3 py-2 bg-black border border-gray-800 rounded-xl text-xs text-white"
-                            placeholder="062 448 7650"
+                            placeholder="0624487650"
                           />
                         </div>
                         <div>
