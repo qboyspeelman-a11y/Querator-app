@@ -7,6 +7,7 @@ import { DriverDashboard } from './DriverDashboard';
 import { StudentDashboard } from './StudentDashboard';
 import { AdminGate } from './AdminGate';
 import { App as CapacitorApp } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
 
 function MainApp() {
   const [session, setSession] = useState<any>(null);
@@ -231,10 +232,12 @@ function MainApp() {
   };
 
   const handleGoogleSignIn = async () => {
+    const isNative = Capacitor.isNativePlatform();
+
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { 
-        redirectTo: window.location.origin,
+        redirectTo: isNative ? 'querator://login-callback' : window.location.origin,
       },
     });
     if (error) alert(`Google sign-in error: ${error.message}`);
